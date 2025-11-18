@@ -1,3 +1,5 @@
+#!/opt/anaconda3/bin/python
+
 import pygame
 import math
 import sys
