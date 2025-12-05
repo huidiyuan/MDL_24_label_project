@@ -5,6 +5,7 @@ import math
 import sys
 import pandas as pd
 from datetime import datetime
+import random
 
 # Initialize Pygame
 pygame.init()
@@ -45,6 +46,7 @@ class Slider:
         self.dragging = False
         self.handle_radius = 12
         self.center_val = center_val  # Optional center value for special marking
+        self.touched = False  # Track if slider has been interacted with
         
     def get_handle_x(self):
         # Calculate handle position based on current value
@@ -92,7 +94,7 @@ class Slider:
         
         # Draw handle
         handle_pos = (int(handle_x), self.rect.centery)
-        pygame.draw.circle(screen, DARK_BLUE if self.label == "Right Circle Size" else DARK_RED, handle_pos, self.handle_radius)
+        pygame.draw.circle(screen, DARK_GRAY, handle_pos, self.handle_radius)
         pygame.draw.circle(screen, WHITE, handle_pos, self.handle_radius - 3)
         
         # Draw label
@@ -119,7 +121,7 @@ class Slider:
                 log_val = math.log10(val)
                 proportion = (log_val - log_min) / (log_max - log_min)
                 tick_x = self.rect.x + proportion * self.rect.width
-                tick_label = tick_font.render(text, True, DARK_GRAY)
+                tick_label = tick_font.render(text, True, BLACK)
                 tick_rect = tick_label.get_rect(center=(tick_x, self.rect.y - 10))
                 screen.blit(tick_label, tick_rect)
         
@@ -144,6 +146,7 @@ class Slider:
             distance = math.sqrt((mouse_pos[0] - handle_pos[0])**2 + (mouse_pos[1] - handle_pos[1])**2)
             if distance <= self.handle_radius or self.rect.collidepoint(mouse_pos):
                 self.dragging = True
+                self.touched = True  # Mark as touched when user clicks
                 self.update_value(mouse_pos[0])
                 
         elif event.type == pygame.MOUSEBUTTONUP:
@@ -174,6 +177,10 @@ class Slider:
         else:
             # Linear scale for overlap slider
             self.value = self.min_val + proportion * (self.max_val - self.min_val)
+    
+    def reset_touched(self):
+        """Reset the touched flag for a new trial"""
+        self.touched = False
 
 
 class Button:
@@ -184,10 +191,17 @@ class Button:
         self.hover_color = hover_color
         self.text_color = text_color
         self.is_hovered = False
+        self.enabled = True  # Add enabled state
+        self.show_warning = False  # Track if warning should be shown
     
     def draw(self, screen):
-        # Choose color based on hover state
-        current_color = self.hover_color if self.is_hovered else self.color
+        # Choose color based on hover state and enabled state
+        if not self.enabled:
+            current_color = (180, 180, 180)  # Gray out when disabled
+            text_color = (150, 150, 150)
+        else:
+            current_color = self.hover_color if self.is_hovered else self.color
+            text_color = self.text_color
         
         # Draw button
         pygame.draw.rect(screen, current_color, self.rect, border_radius=8)
@@ -195,7 +209,7 @@ class Button:
         
         # Draw text
         font = pygame.font.Font(None, 32)
-        text_surface = font.render(self.text, True, self.text_color)
+        text_surface = font.render(self.text, True, text_color)
         text_rect = text_surface.get_rect(center=self.rect.center)
         screen.blit(text_surface, text_rect)
     
@@ -204,6 +218,9 @@ class Button:
         self.is_hovered = self.rect.collidepoint(mouse_pos)
         
         if event.type == pygame.MOUSEBUTTONDOWN and self.is_hovered:
+            if not self.enabled:  # User clicked disabled button
+                self.show_warning = True
+                return False
             return True
         return False
 
@@ -247,8 +264,8 @@ def calculate_right_circle_position(overlap_percent, left_radius, right_radius, 
 
 # Read the CSV file with label pairs
 try:
-    df = pd.read_csv('labels.csv')  # Change this to your CSV file path
-    if 'label1' not in df.columns or 'label2' not in df.columns:
+    label_df = pd.read_csv('labels.csv')  # Change this to your CSV file path
+    if 'label1' not in label_df.columns or 'label2' not in label_df.columns:
         print("Error: CSV must contain 'label1' and 'label2' columns")
         sys.exit(1)
 except FileNotFoundError:
@@ -325,6 +342,12 @@ while input_active:
 # Data collection list
 results = []
 
+# Generate random order indicators for each trial (0 or 1)
+# 0 = original order (label1 left, label2 right)
+# 1 = reversed order (label2 left, label1 right)
+order_indicators = [random.randint(0, 1) for _ in range(len(label_df))]
+print(f"\nParticipant {participant_id} - Order indicators for each trial: {order_indicators}")
+
 # Create sliders with updated range (10% to 1000%, centered at 100% using log scale)
 size_slider = Slider(300, 550, 600, 30, 10, 1000, 100, "Right Circle Size", center_val=100)
 overlap_slider = Slider(300, 650, 600, 30, 0, 100, 0, "Overlap Percentage")
@@ -342,16 +365,40 @@ font_instructions = pygame.font.Font(None, 24)
 
 # Trial tracking
 current_trial = 0
-total_trials = len(df)
+total_trials = len(label_df)
 
 while running and current_trial < total_trials:
     # Get current labels
-    label1 = df.iloc[current_trial]['label1']
-    label2 = df.iloc[current_trial]['label2']
+    label1_original = label_df.iloc[current_trial]['label1']
+    label2_original = label_df.iloc[current_trial]['label2']
+    
+    # Get order indicator for this specific trial
+    order_indicator = order_indicators[current_trial]
+    
+    # Apply order based on order_indicator
+    if order_indicator == 1:
+        # Reversed: label2 appears on left (blue), label1 on right (red)
+        left_label_text = label2_original
+        right_label_text = label1_original
+        left_color = DARK_BLUE
+        right_color = DARK_RED
+    else:
+        # Original: label1 appears on left (blue), label2 on right (red)
+        left_label_text = label1_original
+        right_label_text = label2_original
+        left_color = DARK_BLUE
+        right_color = DARK_RED
     
     # Trial loop
     trial_running = True
     while trial_running:
+        # Check if both sliders have been touched to enable Next button
+        next_button.enabled = size_slider.touched and overlap_slider.touched
+        
+        # Hide warning if sliders are now touched
+        if next_button.enabled:
+            next_button.show_warning = False
+        
         # Handle events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -375,8 +422,11 @@ while running and current_trial < total_trials:
                 results.append({
                     'participant_id': participant_id,
                     'trial': current_trial + 1,
-                    'label1': label1,
-                    'label2': label2,
+                    'order_indicator': order_indicator,
+                    'label1_original': label1_original,
+                    'label2_original': label2_original,
+                    'label_left': left_label_text,
+                    'label_right': right_label_text,
                     'size_percent': size_percent,
                     'overlap_percent': overlap_percent,
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -385,6 +435,9 @@ while running and current_trial < total_trials:
                 # Reset sliders for next trial
                 size_slider.value = 100
                 overlap_slider.value = 0
+                size_slider.reset_touched()
+                overlap_slider.reset_touched()
+                next_button.show_warning = False
                 
                 # Move to next trial
                 current_trial += 1
@@ -421,12 +474,12 @@ while running and current_trial < total_trials:
         draw_circle_with_outline(screen, right_circle_pos, right_radius, RED, DARK_RED)
         draw_circle_with_outline(screen, left_circle_pos, base_radius, BLUE, DARK_BLUE)
         
-        # Draw circle labels at fixed positions with current trial labels
-        left_label = font_instructions.render(str(label1), True, DARK_BLUE)
+        # Draw circle labels at fixed positions with randomized trial labels
+        left_label = font_instructions.render(str(left_label_text), True, left_color)
         left_label_rect = left_label.get_rect(center=LEFT_LABEL_POS)
         screen.blit(left_label, left_label_rect)
         
-        right_label = font_instructions.render(str(label2), True, DARK_RED)
+        right_label = font_instructions.render(str(right_label_text), True, right_color)
         right_label_rect = right_label.get_rect(center=RIGHT_LABEL_POS)
         screen.blit(right_label, right_label_rect)
         
@@ -436,6 +489,14 @@ while running and current_trial < total_trials:
         
         # Draw Next button
         next_button.draw(screen)
+        
+        # Only show instruction message if user attempted to click disabled button
+        if next_button.show_warning:
+            instruction_font = pygame.font.Font(None, 22)
+            instruction_text = "Please adjust both sliders before continuing"
+            instruction_surface = instruction_font.render(instruction_text, True, (200, 50, 50))
+            instruction_rect = instruction_surface.get_rect(center=(WINDOW_WIDTH // 2, 500))
+            screen.blit(instruction_surface, instruction_rect)
         
         # Update display
         pygame.display.flip()

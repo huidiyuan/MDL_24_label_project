@@ -1,0 +1,7 @@
+participant_id,trial,order_indicator,label1_original,label2_original,label_left,label_right,size_percent,overlap_percent,timestamp
+11,1,1,The homeless,People without a home,People without a home,The homeless,101.54689924330806,0.0,2025-12-05 14:46:16
+11,2,0,Cat,Feline,Cat,Feline,119.30720363265335,35.16666666666667,2025-12-05 14:46:21
+11,3,0,Doctor,Physician,Doctor,Physician,44.6683592150963,64.83333333333333,2025-12-05 14:46:25
+11,4,0,Car,Automobile,Car,Automobile,101.54689924330806,3.166666666666667,2025-12-05 14:46:33
+11,5,0,Happy,Joyful,Happy,Joyful,363.0780547701014,20.666666666666668,2025-12-05 14:46:36
+11,6,0,Big,Large,Big,Large,217.10342088869558,27.666666666666668,2025-12-05 14:46:40
